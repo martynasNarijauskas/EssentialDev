@@ -96,12 +96,37 @@ class RemoteFeedLoaderTests: XCTestCase {
             httpClient.complete(with: 200, data: json, index: 0)
         })
     }
+    
+    func test_load_does_not_complete_after_deallocated_instance() {
+        let url = URL(string: "www.google.lt")!
+        let httpClient = HTTPClientSpy()
+        var loader: RemoteFeedLoader? = RemoteFeedLoader(url: url, client: httpClient)
+        
+        var capturedResults = [RemoteFeedLoader.Result]()
+        
+        loader?.load{ capturedResults.append( $0 ) }
+        loader = nil
+        
+        httpClient.complete(with: 200, data: makeItemsJson([]), index: 0)
+    
+        XCTAssertTrue(capturedResults.isEmpty)
+    }
 
     
-    private func makeSUT(url: URL = URL(string: "www.google.lt")!) -> (RemoteFeedLoader, HTTPClientSpy) {
+    private func makeSUT(url: URL = URL(string: "www.google.lt")!, file: StaticString = #file, line: UInt = #line) -> (RemoteFeedLoader, HTTPClientSpy) {
         let httpClient = HTTPClientSpy()
         let remoteFeedLoader = RemoteFeedLoader(url: url, client: httpClient)
+        
+        trackMemoryLeak(instance: remoteFeedLoader, file: file, line: line)
+        trackMemoryLeak(instance: httpClient, file: file, line: line)
+        
         return (remoteFeedLoader, httpClient)
+    }
+    
+    private func trackMemoryLeak(instance: AnyObject, file: StaticString = #file, line: UInt = #line) {
+        addTeardownBlock { [weak instance] in
+            XCTAssertNil(instance, file: (file), line: line)
+        }
     }
     
     private func makeItem(id: UUID, description: String? = nil, location: String? = nil, imageURL: URL) -> (model: FeedItem, json: [String: Any]) {
